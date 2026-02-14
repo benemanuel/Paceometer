@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Paceometer</string>
+    <string name="miles">Miles</string>
+    <string name="kilometers">Kilometers</string>
+    <string name="gps_active">🛰️ GPS Active</string>
+    <string name="gps_acquiring">⏳ Acquiring GPS…</string>
+    <string name="gps_error">⚠️ GPS Error</string>
+    <string name="permission_denied">Location permission required</string>
+</resources>
