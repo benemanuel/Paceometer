@@ -93,7 +93,16 @@
             android:text="Paceometer · Peer &amp; Gamliel (2013)"
             android:textColor="#475569"
             android:textSize="11sp"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="16dp"/>
+
+        <!-- App Development Credit -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="App: Avi BenEmanuel &amp; Claude"
+            android:textColor="#64748b"
+            android:textSize="10sp"
+            android:layout_marginTop="4dp"
             android:layout_marginBottom="16dp"/>
 
     </LinearLayout>

@@ -17,10 +17,20 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        release {
+            storeFile file('../paceometer.keystore')
+            storePassword System.getenv('KEYSTORE_PASSWORD')
+            keyAlias 'paceometer_key'
+            keyPassword System.getenv('KEYSTORE_PASSWORD')
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
 

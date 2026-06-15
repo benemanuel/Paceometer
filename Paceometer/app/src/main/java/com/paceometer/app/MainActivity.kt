@@ -14,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.*
+import java.util.*
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
@@ -22,6 +23,9 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "Paceometer"
+        private const val SCREEN_MODE_OFF = 0
+        private const val SCREEN_MODE_AUTO = 1
+        private const val SCREEN_MODE_ON = 2
     }
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -34,6 +38,7 @@ class MainActivity : AppCompatActivity() {
 
     private var isTracking = false
     private var useMetric = false // false = miles, true = km
+    private var screenMode = SCREEN_MODE_AUTO // default to smart mode
     private val prefs by lazy { getSharedPreferences("paceometer_prefs", MODE_PRIVATE) }
 
     // Conversion factors from m/s
@@ -67,9 +72,23 @@ class MainActivity : AppCompatActivity() {
         savingsText = findViewById(R.id.savingsText)
         insightText = findViewById(R.id.insightText)
 
-        // Load saved unit preference
-        useMetric = prefs.getBoolean("use_metric", false)
+        // Detect metric system from device locale
+        val locale = Locale.getDefault()
+        val metricsCountries = setOf("AT", "AU", "BE", "BG", "CA", "HR", "CY", "CZ", "DK", "EE",
+            "FI", "FR", "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT",
+            "RO", "SK", "SI", "ES", "SE", "CH", "NO", "SE", "GB", "JP", "CN", "IN", "KR", "ZA",
+            "RU", "BR", "MX", "AR", "CL", "TR", "AE", "SA", "TH", "MY", "SG", "ID", "PH", "VN",
+            "NZ", "AU", "HK", "TW")
+
+        val isMetricCountry = metricsCountries.contains(locale.country?.uppercase())
+        useMetric = prefs.getBoolean("use_metric", isMetricCountry)
         paceometerView.setMetric(useMetric)
+
+        // Load screen mode preference (default: Auto/Smart)
+        screenMode = prefs.getInt("screen_mode", SCREEN_MODE_AUTO)
+        applyScreenMode()
+
+        Log.d(TAG, "Device locale: ${locale.country}, using metric: $useMetric")
 
         // Initialize location client
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
@@ -152,12 +171,29 @@ class MainActivity : AppCompatActivity() {
         } else {
             speedMs * MS_TO_MPH
         }
-        
+
         val unitLabel = if (useMetric) "km/h" else "mph"
         Log.d(TAG, "Speed: %.1f m/s -> %.1f %s".format(speedMs, displaySpeed, unitLabel))
 
         paceometerView.setSpeed(displaySpeed.toFloat())
         updateInfoPanel(displaySpeed.toFloat())
+
+        // Handle smart screen mode
+        if (screenMode == SCREEN_MODE_AUTO) {
+            applyScreenMode(displaySpeed.toFloat())
+        }
+    }
+
+    private fun applyScreenMode(currentSpeed: Float = 0f) {
+        when (screenMode) {
+            SCREEN_MODE_OFF -> paceometerView.setKeepScreenOn(false)
+            SCREEN_MODE_ON -> paceometerView.setKeepScreenOn(true)
+            SCREEN_MODE_AUTO -> {
+                // Keep screen on if moving (speed > 2 mph/km to avoid noise)
+                val minSpeed = if (useMetric) 3f else 2f
+                paceometerView.setKeepScreenOn(currentSpeed > minSpeed)
+            }
+        }
     }
 
     private fun updateInfoPanel(speed: Float) {
@@ -229,9 +265,31 @@ class MainActivity : AppCompatActivity() {
                 updateInfoPanel(paceometerView.getCurrentSpeed())
                 true
             }
+            R.id.menu_screen_off -> {
+                screenMode = SCREEN_MODE_OFF
+                prefs.edit().putInt("screen_mode", SCREEN_MODE_OFF).apply()
+                applyScreenMode()
+                Log.d(TAG, "Screen mode: Always Off")
+                true
+            }
+            R.id.menu_screen_auto -> {
+                screenMode = SCREEN_MODE_AUTO
+                prefs.edit().putInt("screen_mode", SCREEN_MODE_AUTO).apply()
+                applyScreenMode()
+                Log.d(TAG, "Screen mode: Auto (Smart)")
+                true
+            }
+            R.id.menu_screen_on -> {
+                screenMode = SCREEN_MODE_ON
+                prefs.edit().putInt("screen_mode", SCREEN_MODE_ON).apply()
+                applyScreenMode()
+                Log.d(TAG, "Screen mode: Always On")
+                true
+            }
             else -> super.onOptionsItemSelected(item)
         }
     }
+
 }
 
 /**
