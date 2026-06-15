@@ -1,0 +1,28 @@
+# Gradle
+Paceometer/.gradle/
+Paceometer/app/build/
+Paceometer/build/
+.gradle/
+build/
+
+# Local configuration
+Paceometer/local.properties
+
+# Android Studio
+.idea/
+*.iml
+*.apk
+
+# Keystore (NEVER commit!)
+*.keystore
+*.jks
+
+# Build artifacts
+*.class
+.DS_Store
+
+# Gradle wrapper jar is allowed (needed for builds)
+!Paceometer/gradle/wrapper/gradle-wrapper.jar
+
+# Root level files
+ic_launcher.png

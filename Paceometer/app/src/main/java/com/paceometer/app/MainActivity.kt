@@ -5,6 +5,9 @@ import android.content.pm.PackageManager
 import android.graphics.*
 import android.os.Bundle
 import android.os.Looper
+import android.util.Log
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,10 +20,13 @@ import kotlin.math.sin
 
 class MainActivity : AppCompatActivity() {
 
+    companion object {
+        private const val TAG = "Paceometer"
+    }
+
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
     private lateinit var paceometerView: PaceometerView
-    private lateinit var unitToggle: RadioGroup
     private lateinit var statusText: TextView
     private lateinit var paceText: TextView
     private lateinit var savingsText: TextView
@@ -28,6 +34,7 @@ class MainActivity : AppCompatActivity() {
 
     private var isTracking = false
     private var useMetric = false // false = miles, true = km
+    private val prefs by lazy { getSharedPreferences("paceometer_prefs", MODE_PRIVATE) }
 
     // Conversion factors from m/s
     private val MS_TO_MPH = 2.23694
@@ -39,9 +46,12 @@ class MainActivity : AppCompatActivity() {
         val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
         val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
         
+        Log.d(TAG, "Permission result - fine: $fineGranted, coarse: $coarseGranted")
+        
         if (fineGranted || coarseGranted) {
             startLocationUpdates()
         } else {
+            Log.w(TAG, "Location permission denied by user")
             statusText.text = "⚠️ Location permission denied"
         }
     }
@@ -52,11 +62,14 @@ class MainActivity : AppCompatActivity() {
 
         // Initialize views
         paceometerView = findViewById(R.id.paceometerView)
-        unitToggle = findViewById(R.id.unitToggle)
         statusText = findViewById(R.id.statusText)
         paceText = findViewById(R.id.paceText)
         savingsText = findViewById(R.id.savingsText)
         insightText = findViewById(R.id.insightText)
+
+        // Load saved unit preference
+        useMetric = prefs.getBoolean("use_metric", false)
+        paceometerView.setMetric(useMetric)
 
         // Initialize location client
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
@@ -66,22 +79,15 @@ class MainActivity : AppCompatActivity() {
             override fun onLocationResult(result: LocationResult) {
                 result.lastLocation?.let { location ->
                     val speedMs = location.speed // meters per second
+                    Log.d(TAG, "GPS update - speed: ${speedMs} m/s, accuracy: ${location.accuracy}m, hasSpeed: ${location.hasSpeed()}")
                     if (location.hasSpeed() && speedMs >= 0) {
                         updateSpeed(speedMs)
                     } else {
+                        Log.d(TAG, "No speed data available, setting to 0")
                         updateSpeed(0f)
                     }
                 }
             }
-        }
-
-        // Unit toggle listener
-        unitToggle.setOnCheckedChangeListener { _, checkedId ->
-            useMetric = checkedId == R.id.radioKm
-            paceometerView.setMetric(useMetric)
-            // Re-update display with current speed
-            paceometerView.invalidate()
-            updateInfoPanel(paceometerView.getCurrentSpeed())
         }
 
         // Start tracking on launch
@@ -107,6 +113,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startLocationUpdates() {
+        Log.d(TAG, "Starting location updates...")
+        
         val locationRequest = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
             1000L // Update every 1 second
@@ -122,14 +130,17 @@ class MainActivity : AppCompatActivity() {
                 Looper.getMainLooper()
             )
             isTracking = true
+            Log.i(TAG, "Location updates started successfully")
             statusText.text = "🛰️ GPS Active"
             statusText.setTextColor(ContextCompat.getColor(this, R.color.gps_active))
         } catch (e: SecurityException) {
+            Log.e(TAG, "SecurityException: ${e.message}")
             statusText.text = "⚠️ Location permission required"
         }
     }
 
     private fun stopLocationUpdates() {
+        Log.d(TAG, "Stopping location updates")
         fusedLocationClient.removeLocationUpdates(locationCallback)
         isTracking = false
         statusText.text = "GPS Stopped"
@@ -141,6 +152,9 @@ class MainActivity : AppCompatActivity() {
         } else {
             speedMs * MS_TO_MPH
         }
+        
+        val unitLabel = if (useMetric) "km/h" else "mph"
+        Log.d(TAG, "Speed: %.1f m/s -> %.1f %s".format(speedMs, displaySpeed, unitLabel))
 
         paceometerView.setSpeed(displaySpeed.toFloat())
         updateInfoPanel(displaySpeed.toFloat())
@@ -190,6 +204,33 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         stopLocationUpdates()
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.menu_main, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.menu_miles -> {
+                useMetric = false
+                prefs.edit().putBoolean("use_metric", false).apply()
+                paceometerView.setMetric(false)
+                paceometerView.invalidate()
+                updateInfoPanel(paceometerView.getCurrentSpeed())
+                true
+            }
+            R.id.menu_kilometers -> {
+                useMetric = true
+                prefs.edit().putBoolean("use_metric", true).apply()
+                paceometerView.setMetric(true)
+                paceometerView.invalidate()
+                updateInfoPanel(paceometerView.getCurrentSpeed())
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
     }
 }
 
@@ -316,68 +357,62 @@ class PaceometerView @JvmOverloads constructor(
         ringPaint.strokeWidth = 35f * scale
         canvas.drawCircle(centerX, centerY, radius * 0.92f, ringPaint)
 
-        // Draw speed ticks
+        // Draw speed ticks (subtle, minimal)
         val maxSpeed = getMaxSpeed().toInt()
-        val step = getSpeedStep()
+        val step = getSpeedStep() * 2 // Show fewer ticks - every 20/20 instead of 10/10
         for (speed in 0..maxSpeed step step) {
             val angle = speedToAngle(speed.toFloat())
             val rad = Math.toRadians((angle - 90).toDouble())
 
-            val innerR = radius * 0.63f
-            val outerR = radius * 0.73f
-            val labelR = radius * 0.52f
+            val innerR = radius * 0.65f
+            val outerR = radius * 0.71f
+            val labelR = radius * 0.55f
 
             val x1 = centerX + innerR * cos(rad).toFloat()
             val y1 = centerY + innerR * sin(rad).toFloat()
             val x2 = centerX + outerR * cos(rad).toFloat()
             val y2 = centerY + outerR * sin(rad).toFloat()
 
-            tickPaint.strokeWidth = 3f * scale
+            tickPaint.strokeWidth = 2f * scale
             canvas.drawLine(x1, y1, x2, y2, tickPaint)
 
             val lx = centerX + labelR * cos(rad).toFloat()
             val ly = centerY + labelR * sin(rad).toFloat()
-            speedTextPaint.textSize = 36f * scale
+            speedTextPaint.textSize = 28f * scale
             canvas.drawText(speed.toString(), lx, ly + speedTextPaint.textSize / 3, speedTextPaint)
         }
 
-        // Draw pace ticks (orange, outer)
+        // Draw pace ticks (orange, outer) - PRIMARY FOCUS
         for ((speed, pace) in getPaceTicks()) {
             val angle = speedToAngle(speed.toFloat())
             val rad = Math.toRadians((angle - 90).toDouble())
 
-            val innerR = radius * 0.83f
+            val innerR = radius * 0.82f
             val outerR = radius * 0.94f
-            val labelR = radius * 0.76f
+            val labelR = radius * 0.75f
 
             val x1 = centerX + innerR * cos(rad).toFloat()
             val y1 = centerY + innerR * sin(rad).toFloat()
             val x2 = centerX + outerR * cos(rad).toFloat()
             val y2 = centerY + outerR * sin(rad).toFloat()
 
-            paceTickPaint.strokeWidth = 4f * scale
+            paceTickPaint.strokeWidth = 5f * scale
             canvas.drawLine(x1, y1, x2, y2, paceTickPaint)
 
             val lx = centerX + labelR * cos(rad).toFloat()
             val ly = centerY + labelR * sin(rad).toFloat()
-            paceTextPaint.textSize = 28f * scale
+            paceTextPaint.textSize = 32f * scale
             val paceStr = if (pace % 1 == 0f) pace.toInt().toString() else String.format("%.1f", pace)
             canvas.drawText(paceStr, lx, ly + paceTextPaint.textSize / 3, paceTextPaint)
         }
 
-        // Center labels
-        labelPaint.textSize = 28f * scale
-        canvas.drawText(getUnitLabel(), centerX, centerY - radius * 0.22f, labelPaint)
-        
-        paceTextPaint.textSize = 26f * scale
-        canvas.drawText(getPaceLabel(), centerX, centerY + radius * 0.18f, paceTextPaint)
+        // Current speed display (center, large)
+        currentSpeedPaint.textSize = 80f * scale
+        canvas.drawText(currentSpeed.toInt().toString(), centerX, centerY + radius * 0.32f, currentSpeedPaint)
 
-        // Current speed display
-        currentSpeedPaint.textSize = 72f * scale
-        canvas.drawText(currentSpeed.toInt().toString(), centerX, centerY + radius * 0.38f, currentSpeedPaint)
-        
-        labelPaint.textSize = 26f * scale
-        canvas.drawText(getSpeedLabel(), centerX, centerY + radius * 0.48f, labelPaint)
+        labelPaint.textSize = 24f * scale
+        val speedLabel = getSpeedLabel()
+        canvas.drawText(speedLabel, centerX, centerY + radius * 0.42f, labelPaint)
 
         // Draw needle
         val needleAngle = speedToAngle(min(currentSpeed, getMaxSpeed()))
@@ -386,15 +421,15 @@ class PaceometerView @JvmOverloads constructor(
 
         val needlePath = Path().apply {
             moveTo(centerX, centerY - radius * 0.62f)  // tip
-            lineTo(centerX - 6f * scale, centerY)       // left base
-            lineTo(centerX, centerY + 12f * scale)      // bottom
-            lineTo(centerX + 6f * scale, centerY)       // right base
+            lineTo(centerX - 7f * scale, centerY)       // left base
+            lineTo(centerX, centerY + 14f * scale)      // bottom
+            lineTo(centerX + 7f * scale, centerY)       // right base
             close()
         }
         canvas.drawPath(needlePath, needlePaint)
         canvas.restore()
 
         // Center cap
-        canvas.drawCircle(centerX, centerY, 12f * scale, centerPaint)
+        canvas.drawCircle(centerX, centerY, 14f * scale, centerPaint)
     }
 }

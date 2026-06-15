@@ -13,41 +13,6 @@
         android:gravity="center_horizontal"
         android:padding="16dp">
 
-        <!-- Unit Toggle -->
-        <RadioGroup
-            android:id="@+id/unitToggle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="12dp">
-
-            <RadioButton
-                android:id="@+id/radioMiles"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Miles"
-                android:checked="true"
-                android:textColor="#e2e8f0"
-                android:buttonTint="#3b82f6"
-                android:paddingStart="8dp"
-                android:paddingEnd="24dp"
-                android:textSize="16sp"
-                android:textStyle="bold"/>
-
-            <RadioButton
-                android:id="@+id/radioKm"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Kilometers"
-                android:textColor="#e2e8f0"
-                android:buttonTint="#3b82f6"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:textSize="16sp"
-                android:textStyle="bold"/>
-        </RadioGroup>
-
         <!-- GPS Status -->
         <TextView
             android:id="@+id/statusText"
